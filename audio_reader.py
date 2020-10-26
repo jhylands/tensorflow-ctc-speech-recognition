@@ -112,3 +112,57 @@ class AudioReader(object):
         shuffle(all_speakers)
         speaker_list = all_speakers[0:num_speakers]
         return speaker_list
+
+
+class FolderAudioReader(object): 
+    def __init__(self):
+        self.cache = {}
+
+    def build_cache(self):
+        here = os.path.dirname(__file__)
+        s_fol = "../speech/"
+        folders = ["yes", "no", "up", "down", "left",
+"right", "on", "off", "stop", "go", "zero", "one", "two", "three", "four",
+"five", "six", "seven", "eight", "nine"]
+        files = []
+        for folder in folders:
+            files += [(folder, f) for f in os.listdir(os.path.join(here, s_fol, folder))]
+
+        cache_dir='cache'
+        print('Nothing found at {}. Generating all the caches now.'.format(cache_dir))
+        assert len(files) != 0, 'Cannot find any VCTK files there. Are you sure audio_dir is correct?'
+        for i, (target_text, filename) in enumerate(files):
+            print(i, target_text)
+            try:
+                audio = self.read_audio_from_filename(os.path.join(here, s_fol, target_text, filename))
+                obj = {'audio': audio,
+                       'target': target_text,
+                       FILENAME: filename}
+                cache_filename = str(i) + '_cache'
+                tmp_filename = os.path.join(cache_dir, cache_filename) + '.pkl'
+                with open(tmp_filename, 'wb') as f:
+                    dill.dump(obj, f)
+                    print('[DUMP AUDIO] {}'.format(tmp_filename))
+            except librosa.util.exceptions.ParameterError as e:
+                print(e)
+                print('[DUMP AUDIO ERROR SKIPPING FILENAME] {}'.format(filename))
+
+    def load_cache(self):
+        st = time()
+        cache_dir='cache'
+        pickle_files = find_files(cache_dir, pattern='*.pkl')
+        for pkl_file in pickle_files:
+            if 'metadata' not in pkl_file:
+                with open(pkl_file, 'rb') as f:
+                    obj = dill.load(f)
+                    obj[FILENAME] = pkl_file
+                    self.cache[obj[FILENAME]] = obj
+        print('Cache took {0:.2f} seconds to load. {1:} keys.'.format(time() - st, len(self.cache)))
+
+    def read_audio_from_filename(self, filename):
+        # import scipy.io.wavfile as wav
+        # fs, audio = wav.read(filename)
+        audio, _ = librosa.load(filename, sr=16000, mono=True)
+        audio = librosa.resample(audio, 16000, 8000)
+        audio = audio.reshape(-1, 1)
+        return audio

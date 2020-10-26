@@ -5,7 +5,7 @@ import time
 import numpy as np
 import tensorflow as tf
 
-from audio_reader import AudioReader
+from audio_reader import FolderAudioReader
 from file_logger import FileLogger
 from utils import FIRST_INDEX, sparse_tuple_from
 from utils import convert_inputs_to_ctc_format
@@ -19,15 +19,14 @@ num_classes = ord('z') - ord('a') + 1 + 1 + 1
 # Hyper-parameters
 num_epochs = 100000
 num_hidden = 256
-batch_size = 16
+batch_size = 32
 
 num_examples = 1
 num_batches_per_epoch = 10
 
 # make sure the values match the ones in generate_audio_cache.py
-audio = AudioReader(audio_dir=None,
-                    cache_dir='cache',
-                    sample_rate=sample_rate)
+audio = FolderAudioReader()
+audio.load_cache()
 
 file_logger = FileLogger('out.tsv', ['curr_epoch', 'train_cost', 'train_ler', 'val_cost', 'val_ler'])
 
@@ -37,22 +36,14 @@ def next_batch(bs=batch_size, train=True):
     y_batch = []
     seq_len_batch = []
     original_batch = []
+    ut_length_dict = dict([(k, len(v['target'])) for (k, v) in audio.cache.items()])
+    utterances = sorted(ut_length_dict.items(), key=operator.itemgetter(1))
+    utterance_keys = [a[0] for a in utterances]
     for k in range(bs):
-        ut_length_dict = dict([(k, len(v['target'])) for (k, v) in audio.cache.items()])
-        utterances = sorted(ut_length_dict.items(), key=operator.itemgetter(1))
-        test_index = 15
-        if train:
-            utterances = [a[0] for a in utterances[test_index:]]
-        else:
-            utterances = [a[0] for a in utterances[:test_index]]
-        random_utterance = random.choice(utterances)
+        random_utterance = random.choice(utterance_keys)
         training_element = audio.cache[random_utterance]
         target_text = training_element['target']
-        if train:
-            l_shift = np.random.randint(low=1, high=1000)
-            audio_buffer = training_element['audio'][l_shift:]
-        else:
-            audio_buffer = training_element['audio']
+        audio_buffer = training_element['audio']
         x, y, seq_len, original = convert_inputs_to_ctc_format(audio_buffer,
                                                                sample_rate,
                                                                target_text,
